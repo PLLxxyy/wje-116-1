@@ -54,6 +54,15 @@ export interface ActivityParticipant {
   status: 'going' | 'cancelled';
 }
 
+export interface ActivityCheckin {
+  id: number;
+  activity_id: number;
+  user_id: number;
+  distance_km: number;
+  duration_minutes: number;
+  checked_in_at: string;
+}
+
 export interface Post {
   id: number;
   user_id: number;

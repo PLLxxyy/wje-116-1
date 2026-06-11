@@ -79,6 +79,18 @@ function initDB() {
       UNIQUE(activity_id, user_id)
     );
 
+    CREATE TABLE IF NOT EXISTS activity_checkins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      activity_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      distance_km REAL DEFAULT 0,
+      duration_minutes INTEGER DEFAULT 0,
+      checked_in_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (activity_id) REFERENCES activities(id),
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      UNIQUE(activity_id, user_id)
+    );
+
     CREATE TABLE IF NOT EXISTS posts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,

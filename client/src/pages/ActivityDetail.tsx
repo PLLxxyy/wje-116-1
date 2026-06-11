@@ -20,6 +20,25 @@ interface ActivityData {
   participantCount: number;
   participants: Array<{ user_id: number; username: string }>;
   posts: Array<any>;
+  isCheckedIn: boolean;
+  checkinInfo: { id: number; distance_km: number; duration_minutes: number; checked_in_at: string } | null;
+  checkinCount: number;
+  isLeader: boolean;
+}
+
+interface CheckinData {
+  checkins: Array<{
+    id: number;
+    user_id: number;
+    username: string;
+    avatar_url: string;
+    distance_km: number;
+    duration_minutes: number;
+    checked_in_at: string;
+    total_km: number;
+  }>;
+  totalDistance: number;
+  checkinCount: number;
 }
 
 export default function ActivityDetail() {
@@ -31,6 +50,12 @@ export default function ActivityDetail() {
   const [distance, setDistance] = useState('');
   const [duration, setDuration] = useState('');
   const [commentTexts, setCommentTexts] = useState<Record<number, string>>({});
+  const [checkinDistance, setCheckinDistance] = useState('');
+  const [checkinDuration, setCheckinDuration] = useState('');
+  const [showCheckinModal, setShowCheckinModal] = useState(false);
+  const [showCheckinList, setShowCheckinList] = useState(false);
+  const [checkinData, setCheckinData] = useState<CheckinData | null>(null);
+  const [checkinListLoading, setCheckinListLoading] = useState(false);
 
   useEffect(() => {
     loadActivity();
@@ -62,6 +87,35 @@ export default function ActivityDetail() {
       loadActivity();
     } catch (err: any) {
       alert(err.message);
+    }
+  }
+
+  async function handleCheckin() {
+    try {
+      await api.post(`/activities/${id}/checkin`, {
+        distance_km: parseFloat(checkinDistance) || 0,
+        duration_minutes: parseInt(checkinDuration) || 0,
+      });
+      setShowCheckinModal(false);
+      setCheckinDistance('');
+      setCheckinDuration('');
+      loadActivity();
+      alert('签到成功！');
+    } catch (err: any) {
+      alert(err.message);
+    }
+  }
+
+  async function loadCheckinList() {
+    try {
+      setCheckinListLoading(true);
+      const data = await api.get<CheckinData>(`/activities/${id}/checkins`);
+      setCheckinData(data);
+      setShowCheckinList(true);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setCheckinListLoading(false);
     }
   }
 
@@ -126,13 +180,26 @@ export default function ActivityDetail() {
             </Link>
             <span style={{ color: '#999', fontSize: 14, marginLeft: 8 }}>发起人: {activity.creator_name}</span>
           </div>
-          {user && (
-            activity.isJoined ? (
-              <button onClick={handleCancel} className="btn-outline">取消报名</button>
-            ) : (
-              <button onClick={handleJoin} className="btn-primary">报名参加</button>
-            )
-          )}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {user && (
+              activity.isJoined ? (
+                <button onClick={handleCancel} className="btn-outline">取消报名</button>
+              ) : (
+                <button onClick={handleJoin} className="btn-primary">报名参加</button>
+              )
+            )}
+            {user && activity.isJoined && !activity.isCheckedIn && (
+              <button onClick={() => setShowCheckinModal(true)} className="btn-primary">签到打卡</button>
+            )}
+            {user && activity.isCheckedIn && (
+              <button disabled className="btn-outline" style={{ opacity: 0.7 }}>✓ 已签到</button>
+            )}
+            {user && activity.isLeader && (
+              <button onClick={loadCheckinList} className="btn-outline">
+                查看签到名单 ({activity.checkinCount})
+              </button>
+            )}
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, padding: '16px 0', borderTop: '1px solid #f0f0f0', borderBottom: '1px solid #f0f0f0' }}>
@@ -161,6 +228,10 @@ export default function ActivityDetail() {
           <div>
             <div style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>参加人数</div>
             <div style={{ fontSize: 14 }}>👥 {activity.participantCount}/{activity.max_participants}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>已签到</div>
+            <div style={{ fontSize: 14 }}>✅ {activity.checkinCount} 人</div>
           </div>
         </div>
 
@@ -273,6 +344,102 @@ export default function ActivityDetail() {
             )}
           </div>
         ))
+      )}
+
+      {/* Checkin Modal */}
+      {showCheckinModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }}>
+          <div className="card" style={{ width: '100%', maxWidth: 400, padding: 24 }}>
+            <h3 style={{ marginBottom: 16 }}>签到打卡</h3>
+            <p style={{ color: '#666', fontSize: 14, marginBottom: 16 }}>
+              填写本次跑步的距离和时长，签到后将自动累计到您的总跑量
+            </p>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>距离 (公里)</label>
+                <input
+                  type="number"
+                  value={checkinDistance}
+                  onChange={e => setCheckinDistance(e.target.value)}
+                  placeholder="0"
+                  step="0.1"
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>时长 (分钟)</label>
+                <input
+                  type="number"
+                  value={checkinDuration}
+                  onChange={e => setCheckinDuration(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowCheckinModal(false)} className="btn-outline">取消</button>
+              <button onClick={handleCheckin} className="btn-primary">确认签到</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Checkin List Modal */}
+      {showCheckinList && checkinData && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+          padding: 20,
+        }}>
+          <div className="card" style={{ width: '100%', maxWidth: 600, maxHeight: '80vh', overflow: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid #f0f0f0' }}>
+              <h3 style={{ margin: 0 }}>签到名单</h3>
+              <button onClick={() => setShowCheckinList(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>×</button>
+            </div>
+            <div style={{ padding: '16px 20px', background: '#f9f9f9', display: 'flex', gap: 24, fontSize: 14 }}>
+              <span>签到人数: <strong>{checkinData.checkinCount}</strong></span>
+              <span>总跑量: <strong>{checkinData.totalDistance.toFixed(1)}</strong> 公里</span>
+            </div>
+            <div style={{ padding: '12px 20px' }}>
+              {checkinData.checkins.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#999', padding: 40 }}>暂无签到记录</div>
+              ) : (
+                checkinData.checkins.map((c, idx) => (
+                  <div key={c.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '12px 0', borderBottom: idx < checkinData.checkins.length - 1 ? '1px solid #f0f0f0' : 'none',
+                  }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: '50%', background: '#e3f2fd',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 14, fontWeight: 600, color: '#1a73e8',
+                    }}>
+                      {c.username[0]}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <Link to={`/profile/${c.user_id}`} style={{ fontWeight: 600, color: '#333', textDecoration: 'none' }}>
+                        {c.username}
+                      </Link>
+                      <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>
+                        签到时间: {new Date(c.checked_in_at).toLocaleString('zh-CN')}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right', fontSize: 13 }}>
+                      <div style={{ color: '#1a73e8', fontWeight: 600 }}>{c.distance_km.toFixed(1)} 公里</div>
+                      {c.duration_minutes > 0 && (
+                        <div style={{ color: '#666' }}>{c.duration_minutes} 分钟</div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

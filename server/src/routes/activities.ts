@@ -208,6 +208,10 @@ router.post('/:id/checkin', authMiddleware, (req: AuthRequest, res: Response) =>
     const { distance_km, duration_minutes } = req.body;
     const activityId = parseInt(req.params.id);
 
+    if (isNaN(activityId)) {
+      return res.status(400).json({ error: '活动ID无效' });
+    }
+
     const activity = db.prepare('SELECT * FROM activities WHERE id = ?').get(activityId) as Activity | undefined;
     if (!activity) {
       return res.status(404).json({ error: '活动不存在' });
@@ -228,16 +232,28 @@ router.post('/:id/checkin', authMiddleware, (req: AuthRequest, res: Response) =>
     const distance = parseFloat(distance_km) || 0;
     const duration = parseInt(duration_minutes) || 0;
 
-    db.prepare(
-      'INSERT INTO activity_checkins (activity_id, user_id, distance_km, duration_minutes) VALUES (?, ?, ?, ?)'
-    ).run(activityId, req.userId, distance, duration);
-
-    if (distance > 0) {
-      db.prepare('UPDATE users SET total_km = total_km + ? WHERE id = ?').run(distance, req.userId);
+    if (distance < 0 || distance > 500) {
+      return res.status(400).json({ error: '距离数值不合法' });
     }
+    if (duration < 0 || duration > 1440) {
+      return res.status(400).json({ error: '时长数值不合法' });
+    }
+
+    const doCheckin = db.transaction((aid: number, uid: number, dist: number, dur: number) => {
+      db.prepare(
+        'INSERT INTO activity_checkins (activity_id, user_id, distance_km, duration_minutes) VALUES (?, ?, ?, ?)'
+      ).run(aid, uid, dist, dur);
+      if (dist > 0) {
+        db.prepare('UPDATE users SET total_km = total_km + ? WHERE id = ?').run(dist, uid);
+      }
+    });
+    doCheckin(activityId, req.userId!, distance, duration);
 
     res.json({ message: '签到成功' });
   } catch (err: any) {
+    if (err.message && err.message.includes('UNIQUE')) {
+      return res.status(400).json({ error: '已完成签到' });
+    }
     res.status(500).json({ error: err.message });
   }
 });

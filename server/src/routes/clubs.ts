@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import db from '../db';
-import { authMiddleware } from '../middleware/auth';
-import { AuthRequest, Club, ClubMember, User } from '../types';
+import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
+import { AuthRequest, Club, ClubMember } from '../types';
 
 const router = Router();
 
@@ -21,7 +21,7 @@ router.get('/', (req: AuthRequest, res: Response) => {
 });
 
 // GET /api/clubs/:id
-router.get('/:id', (req: AuthRequest, res: Response) => {
+router.get('/:id', optionalAuthMiddleware, (req: AuthRequest, res: Response) => {
   try {
     const club = db.prepare(`
       SELECT c.*, u.username as owner_name

@@ -17,7 +17,7 @@ interface ClubDetail {
   isMember: boolean;
   memberRole: string | null;
   members: Array<{ user_id: number; username: string; role: string; total_km: number; joined_at: string }>;
-  weeklyRanking: Array<{ id: number; username: string; weekly_km: number }>;
+  weeklyRanking: Array<{ id: number; username: string; avatar_url: string; weekly_km: number }>;
   activities: Array<any>;
 }
 

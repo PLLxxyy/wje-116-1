@@ -1,12 +1,12 @@
 import { Router, Response } from 'express';
 import db from '../db';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
 import { AuthRequest } from '../types';
 
 const router = Router();
 
 // GET /api/posts - feed
-router.get('/', (req: AuthRequest, res: Response) => {
+router.get('/', optionalAuthMiddleware, (req: AuthRequest, res: Response) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = 20;

@@ -25,6 +25,19 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
   }
 }
 
+export function optionalAuthMiddleware(req: AuthRequest, _res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    try {
+      const payload = jwt.verify(token, JWT_SECRET) as { userId: number; role: string };
+      req.userId = payload.userId;
+      req.userRole = payload.role;
+    } catch {}
+  }
+  next();
+}
+
 export function adminMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
   if (req.userRole !== 'admin') {
     return res.status(403).json({ error: '需要管理员权限' });

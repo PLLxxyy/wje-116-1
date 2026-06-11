@@ -1,12 +1,49 @@
 import { Router, Response } from 'express';
 import db from '../db';
-import { authMiddleware } from '../middleware/auth';
-import { AuthRequest, Activity, ActivityCheckin } from '../types';
+import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth';
+import { AuthRequest, Activity } from '../types';
 
 const router = Router();
 
+// GET /api/activities/:id/checkins - 获取签到名单（团长/管理员可见）
+router.get('/:id/checkins', authMiddleware, (req: AuthRequest, res: Response) => {
+  try {
+    const activityId = parseInt(req.params.id);
+
+    const activity = db.prepare('SELECT * FROM activities WHERE id = ?').get(activityId) as Activity | undefined;
+    if (!activity) {
+      return res.status(404).json({ error: '活动不存在' });
+    }
+
+    const membership = db.prepare('SELECT role FROM club_members WHERE club_id = ? AND user_id = ?')
+      .get(activity.club_id, req.userId) as { role: string } | undefined;
+    if (!membership || (membership.role !== 'owner' && membership.role !== 'admin')) {
+      return res.status(403).json({ error: '只有团长和管理员可以查看签到名单' });
+    }
+
+    const checkins = db.prepare(`
+      SELECT ac.*, u.username, u.avatar_url, u.total_km
+      FROM activity_checkins ac
+      JOIN users u ON ac.user_id = u.id
+      WHERE ac.activity_id = ?
+      ORDER BY ac.checked_in_at ASC
+    `).all(activityId);
+
+    const totalDistance = db.prepare('SELECT COALESCE(SUM(distance_km), 0) as total FROM activity_checkins WHERE activity_id = ?')
+      .get(activityId) as { total: number };
+
+    res.json({
+      checkins,
+      totalDistance: totalDistance.total,
+      checkinCount: checkins.length,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/activities/:id
-router.get('/:id', (req: AuthRequest, res: Response) => {
+router.get('/:id', optionalAuthMiddleware, (req: AuthRequest, res: Response) => {
   try {
     const activity = db.prepare(`
       SELECT a.*, u.username as creator_name, c.name as club_name
@@ -200,43 +237,6 @@ router.post('/:id/checkin', authMiddleware, (req: AuthRequest, res: Response) =>
     }
 
     res.json({ message: '签到成功' });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// GET /api/activities/:id/checkins - 获取签到名单（团长/管理员可见）
-router.get('/:id/checkins', authMiddleware, (req: AuthRequest, res: Response) => {
-  try {
-    const activityId = parseInt(req.params.id);
-
-    const activity = db.prepare('SELECT * FROM activities WHERE id = ?').get(activityId) as Activity | undefined;
-    if (!activity) {
-      return res.status(404).json({ error: '活动不存在' });
-    }
-
-    const membership = db.prepare('SELECT role FROM club_members WHERE club_id = ? AND user_id = ?')
-      .get(activity.club_id, req.userId) as { role: string } | undefined;
-    if (!membership || (membership.role !== 'owner' && membership.role !== 'admin')) {
-      return res.status(403).json({ error: '只有团长和管理员可以查看签到名单' });
-    }
-
-    const checkins = db.prepare(`
-      SELECT ac.*, u.username, u.avatar_url, u.total_km
-      FROM activity_checkins ac
-      JOIN users u ON ac.user_id = u.id
-      WHERE ac.activity_id = ?
-      ORDER BY ac.checked_in_at ASC
-    `).all(activityId);
-
-    const totalDistance = db.prepare('SELECT COALESCE(SUM(distance_km), 0) as total FROM activity_checkins WHERE activity_id = ?')
-      .get(activityId) as { total: number };
-
-    res.json({
-      checkins,
-      totalDistance: totalDistance.total,
-      checkinCount: checkins.length,
-    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
